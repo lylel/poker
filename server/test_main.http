@@ -1,11 +1,12 @@
-# Test your FastAPI endpoints
 
-GET http://127.0.0.1:8000/
-Accept: application/json
+WEBSOCKET ws://localhost:8000/admin/table/
+Content-Type: application/json // We use it for highlighting
 
-###
-
-GET http://127.0.0.1:8000/hello/User
-Accept: application/json
-
-###
+===
+{
+  "name": "Cooker",
+  "maxSeats": 2,
+  "sb": 1,
+  "bb": 2
+}
+=== wait-for-server

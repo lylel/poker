@@ -1,4 +1,4 @@
-from models.table import Seat, Action, PlayerStatus
+from models.table import Action, PlayerStatus
 
 
 class Round:
@@ -10,6 +10,9 @@ class Round:
         self.current_bet = 0
         self.minimum_bet = 0
         self.has_started = False
+
+    def prompt(self):
+        pass
 
     def act(self, action, amount=None):
         if action == Action.CHECK:
@@ -72,7 +75,6 @@ class Round:
     def has_everyone_folded(self):
         return sum(seat.state != PlayerStatus.FOLD for seat in self.seats) == 1
 
-
     # Active Bet?
 
     #              -> Current: Seat 3, State: Start     None last_to_act: Seat 2
@@ -88,3 +90,13 @@ class Round:
     # Seat 4 Call  ->  Current: Seat 5, State: Bet   last_to_act: Seat 7
     # Seat 5 Fold  ->  Current: Seat 7, State: Bet   last_to_act: Seat 7
     # Seat 7 Fold  ->  Current: Seat X, State: End   last_to_act: Seat 7
+
+
+class Seat:
+    def __init__(self):
+        self.state = PlayerStatus.INIT
+        self.bet = 0
+        self.raises = []
+
+    def __repr__(self):
+        return f"State: {self.state}, Bet: {self.bet}"

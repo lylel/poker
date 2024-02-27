@@ -1,5 +1,5 @@
-from models.table import Seat, Action
-from models.round import Round
+from models.table import Action
+from models.round import Round, Seat
 
 
 class TestRound:
