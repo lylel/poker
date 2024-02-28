@@ -2,12 +2,19 @@ import asyncio
 
 from transitions import Machine
 
-from logic.connection_manager import TableConnectionManager
+from logic.connection_manager import TableEventManager
 from main import table_connection_manager
 from models.round import Round
 from models.deck import Deck
-from commands.client import HoleCards, PostSmallBlind, PostBigBlind, UpdatePot, DealFaceDownHoleCards, PromptAction
+from client_events.events import (
+    HoleCards,
+    SeatPostedSmallBlind,
+    SeatPostedBigBlind,
+    UpdatePot,
+    PromptAction, CheckedEvent, ACTION_EVENT_MAP,
+)
 from models.table import Table, Seat, Action
+from utils import timer
 
 
 class Hand:
@@ -60,13 +67,19 @@ class Hand:
         self.pot = 0
         self.bets = []
         self.board = []
-        self.current_betting_round = 0
         self.deck = Deck()
+        self.event_manager = TableEventManager(
+            table_id=self.table.tid,
+            seats=self.seats,
+            table_connection_manager=table_connection_manager,
+        )
         self.machine = Machine(
             model=self, states=Hand.states, transitions=Hand.transitions, initial="init"
         )
-
         self.demand_blinds()
+
+        if self.is_heads_up:
+            self.current_player_i = self.sb_i
 
         self.live_round = Round(
             seats=self.seats,
@@ -76,23 +89,32 @@ class Hand:
             current_i=bb_i,
             bb=self.bb,
         )
-        self.demand_blinds()
-        self.deal_hole_cards()
+
         await asyncio.sleep(1)
-        if self.is_heads_up:
-            self.current_player_i = self.sb_i
-        self.prompt_current_player(options=[Action.CALL, Action.RAISE, Action.FOLD])
 
-    def get_seat_conn(self, seat_i):
-        conn = table_connection_manager.get_connection(
-            table_id=self.table._id, player_id=self.seats[seat_i].player_id
-        )
-        return conn
+        self.proceed()
 
-    def broadcast(self, update):
-        for seat_i, seat in enumerate(self.seats):
-            if seat:
-                self.get_seat_conn(seat_i=seat_i).send_json(update)
+    def on_enter_preflop(self):
+        self.deal_hole_cards()
+        while not self.live_round.is_done:
+            # TODO: Figure out options
+            self.prompt_current_player(options=[Action.CALL, Action.RAISE, Action.FOLD])
+        self.proceed()
+
+    def on_enter_turn(self):
+        # Does this need to be a new object everytime
+        self.live_round = Round()
+        # TODO: don't allow players to sit in in the middle of a hand
+        while not self.live_round.is_done:
+            # TODO: Figure out options
+            self.prompt_current_player(options=[Action.CALL, Action.RAISE, Action.FOLD])
+        self.proceed()
+
+    def on_enter_river(self):
+        pass
+
+    def on_enter_showdown(self):
+        pass
 
     def demand_blinds(self):
         # TODO: Handle case where there's not enough blinds
@@ -100,68 +122,47 @@ class Hand:
         self.seats[self.sb_i].chips -= self.bb
         self.pot += self.sb + self.bb
 
-        self.broadcast(PostSmallBlind(seat_i=self.sb_i, amount=self.sb).model_dump())
-        self.broadcast(PostBigBlind(seat_i=self.bb_i, amount=self.bb).model_dump())
-        self.broadcast(UpdatePot(total=self.pot).model_dump())
+        self.event_manager.broadcast_to_table(
+            SeatPostedSmallBlind(seat_i=self.sb_i, amount=self.sb).model_dump()
+        )
+        self.event_manager.broadcast_to_table(
+            SeatPostedBigBlind(seat_i=self.bb_i, amount=self.bb).model_dump()
+        )
+        self.event_manager.broadcast_to_table(UpdatePot(total=self.pot).model_dump())
 
     def deal_hole_cards(self):
         for seat_i, seat in enumerate(self.seats):
             if seat and seat.is_sitting_in:
-                self.get_seat_conn(seat_i=seat_i).send_json(HoleCards(cards=self.deck.draw_cards(2)).model_dump())
+                self.event_manager.push_to_player(
+                    seat_i=seat_i,
+                    event=HoleCards(cards=self.deck.draw_cards(2)).model_dump(),
+                )
                 # DO WE NEED
                 # for other_seat_i, other_seat in enumerate(self.seats):
                 #     if other_seat and other_seat_i != seat_i:
                 #         self.get_seat_conn(seat_i=other_seat_i).send_json(
                 #             DealFaceDownHoleCards(seat_i=seat_i).model_dump())
 
-    def prompt_current_player(self, options):
-        self.get_seat_conn(self.current_player_i).send_json(PromptAction(options=options))
 
-    def on_exit_init(self):
-        # Send response to current player
-        # Prompt Action
-        pass
+    def prompt_current_player(self, options, time):
+        self.event_manager.push_to_player(
+            self.current_player_i, PromptAction(options=options)
+        )
 
-    def on_enter_init(self):
+        action = asyncio.create_task(self.event_manager.wait_for_event_from_seat(seat_i=self.current_player_i, round=self.live_round))
+        clock_task = asyncio.create_task(timer(time))
 
-        pass
+        done, pending = await asyncio.wait([action, clock_task], return_when=asyncio.FIRST_COMPLETED)
 
-    def on_enter_(self):
-        pass
+        if action in done:
+            action_event = action.result()
 
-    @property
-    def round_is_live(self):
-        return True
+            self.event_manager.broadcast_to_table(
+                event=ACTION_EVENT_MAP[action_event["type"](seat_i=self.current_player_i, table_id=self.table.tid)))
 
-    def start_betting_round(self):
-        if self.state in ["Flop", "Turn", "River"]:
-            self.start_betting()
-            print(f"Started Betting Round {self.current_betting_round + 1}")
-            self.current_betting_round += 1
         else:
-            print("Cannot start betting round at the current state.")
+            #TODO: FIX
+            if self.live_round.all_checked:
+                self.event_manager.broadcast_to_table(event=CheckedEvent(seat_i=self.current_player_i, table_id=self.table.tid))
 
-    def end_betting_round(self):
-        if self.state == "Betting":
-            self.end_betting()
-            print(f"ended Betting Round {self.current_betting_round}")
-        else:
-            print("Cannot end betting round at the current state.")
-
-
-
-        def player_bet(self, player):
-            if self.state == "Betting":
-                print(f"{player} bets.")
-
-        def player_fold(self, player):
-            if self.state == "Betting":
-                print(f"{player} folds.")
-
-        def player_call(self, player):
-            if self.state == "Betting":
-                print(f"{player} calls.")
-
-        def player_raise(self, player):
-            if self.state == "Betting":
-                print(f"{player} raises.")
+            # event_manager

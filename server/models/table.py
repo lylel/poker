@@ -25,7 +25,7 @@ class Seat:
 
 class Table:
     def __init__(self, name, max_seats, sb, bb):
-        self._id = uuid.uuid4()
+        self.tid = uuid.uuid4()
         self.name = name
         self.max_seats = max_seats
         self.sb = sb
@@ -130,7 +130,11 @@ class Table:
 
     @property
     def active_players_count(self):
-        return sum(1 for seat in self.seats if seat and seat.is_sitting_in and seat.chips >= self.bb)
+        return sum(
+            1
+            for seat in self.seats
+            if seat and seat.is_sitting_in and seat.chips >= self.bb
+        )
 
     @property
     def has_minimum_players_to_start(self):
