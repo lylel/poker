@@ -4,13 +4,13 @@ from models.enums import Action
 from models.seat import Seat
 
 
-class TableStateRefreshEvent(BaseModel):
-    seats: list[Seat]
+# class TableStateRefreshEvent(BaseModel):
+#     seats: list[Seat]
 
 
 class HoleCards(BaseModel):
     name: str = "holeCards"
-    cards: list[str]
+    cards: list[int]
 
 
 class DealFaceDownHoleCards(BaseModel):
@@ -41,13 +41,19 @@ class PromptAction(BaseModel):
 
 
 class InvalidActionSubmittedEvent(BaseModel):
-    name = "InvalidActionSubmittedEvent"
+    name: str = "InvalidActionSubmittedEvent"
 
 
-class CheckedEvent(BaseModel):
-    name: str = "checkedEvent"
+class CheckEvent(BaseModel):
+    name: str = "checkEvent"
     seat_i: int
-    table_id: str
+    table_id: str  # TODO: is this needed?
+
+
+class FoldEvent(BaseModel):
+    name: str = "foldEvent"
+    seat_i: int
+    table_id: str  # TODO: is this needed?
 
 
 ACTION_EVENT_MAP = {}

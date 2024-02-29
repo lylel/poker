@@ -5,20 +5,9 @@ from models.hand import Hand
 from models.seat import Seat
 
 
-class CasinoFloor:
-    def __init__(self):
-        self.tables = {}
-
-    def add_table(self, table_id, table):
-        self.tables[table_id] = table
-
-    def remove_table(self, table_id):
-        pass
-
-
 class Table:
     def __init__(self, name, max_seats, sb, bb):
-        self.tid = uuid.uuid4()
+        self.tid = str(uuid.uuid4())
         self.name = name
         self.max_seats = max_seats
         self.sb = sb

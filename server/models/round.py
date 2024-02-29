@@ -3,16 +3,22 @@ from models.seat import Seat
 
 
 class Round:
-    def __init__(self, seats, first_to_act_i, bb, require_blinds=False):
-        self.bb = bb
+    def __init__(self, seats, first_to_act_i, min_raise):
         self.seats: list[Seat] = seats
-        self.current_i = first_to_act_i
+        self.current_seat_i = first_to_act_i
         self.last_bettor_i = first_to_act_i
         self.has_started = False
         self.current_bet = 0
-        self.minimum_raise_allowed = 0
-        self.require_blinds = require_blinds
+        self.minimum_raise_allowed = min_raise
 
+    def get_small_blind(self, sb_i, sb):
+        self.seats[sb_i].chips -= sb
+        self.seats[sb_i].chips_put_in = sb
+
+    def get_big_blind(self, bb_i, bb):
+        self.seats[bb_i].chips -= bb
+        self.seats[bb_i].chips_put_in = bb
+        self.last_bettor_i #
     @property
     def action_map(self):
         return {
@@ -29,17 +35,21 @@ class Round:
 
     @property
     def current_player(self):
-        return self.seats[self.current_i]
+        return self.seats[self.current_seat_i]
 
     @property
     def is_done(self):
-        return self.everyone_has_folded or self.has_started and self.last_bettor_i == self.current_i
+        return (
+            self.everyone_has_folded
+            or self.has_started
+            and self.last_bettor_i == self.current_seat_i
+        )
 
     @property
-    def all_checked(self):
+    def no_action_required(self):
         # TODO: Handle Case: Preflop, everyone has called
         return all(
-            seat.state in (PlayerStatus.CHECK, PlayerStatus.FOLD) for seat in self.seats
+            seat.state in (PlayerStatus.CHECK, PlayerStatus.FOLD, PlayerStatus.INIT) for seat in self.seats
         )
 
     @property
@@ -65,7 +75,7 @@ class Round:
 
     def bet(self, **kwargs):
         amount = kwargs["amount"]
-        if not amount or amount < self.bb or amount > self.current_player.chips:
+        if not amount or amount < self.min_raise or amount > self.current_player.chips:
             return False
 
         if not self.current_bet:
@@ -73,7 +83,7 @@ class Round:
                 self.current_player.chips_put_in
             ) = amount
             self.current_player.chips -= amount
-            self.last_bettor_i = self.current_i
+            self.last_bettor_i = self.current_seat_i
             return True
         return False
 
@@ -106,7 +116,7 @@ class Round:
         self.current_player.chips_put_in = total_put_in
         self.current_bet = total_put_in
 
-        self.last_bettor_i = self.current_i
+        self.last_bettor_i = self.current_seat_i
         return True
 
     def fold(self, **kwargs):
@@ -114,12 +124,12 @@ class Round:
         return True
 
     def set_next_player(self):
-        self.current_i = (self.current_i + 1) % len(self.seats)
+        self.current_seat_i = (self.current_seat_i + 1) % len(self.seats)
         while (
             not self.everyone_has_folded
             and self.current_player.state == PlayerStatus.FOLD
         ):
-            self.current_i = (self.current_i + 1) % len(self.seats)
+            self.current_seat_i = (self.current_seat_i + 1) % len(self.seats)
 
     @property
     def _amount_to_call(self):

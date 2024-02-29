@@ -4,7 +4,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends
 from fastapi.responses import HTMLResponse
 from fastapi.security import HTTPBasicCredentials, HTTPBasic
 
-from logic.table import create_table
+from logic.table_manager import create_table
 
 app = FastAPI()
 security = HTTPBasic()

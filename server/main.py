@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 
+from global_state import table_manager
 from logic.connection_manager import TableConnectionManager
 
 app = FastAPI()
@@ -18,7 +19,7 @@ async def say_hello(name: str):
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.responses import HTMLResponse
 
-from logic.table import create_table
+from logic.table_manager import create_table
 
 app = FastAPI()
 
@@ -68,44 +69,52 @@ async def get():
     return HTMLResponse(html)
 
 
-@app.websocket("/admin/table/")
-async def administrate_table(websocket: WebSocket):
-    print("Got to 1")
-    await manager.connect(websocket)
-    print("Got to 2")
-    try:
-        while True:
-            print("Got to 3")
-
-            request_data = await websocket.receive_json()
-            print("Got to 4")
-
-            table = create_table(request_data)
-            await manager.send_personal_message(f"You wrote: {table}", websocket)
-            # await manager.broadcast(f"Client #{client_id} says: {data}")
-    except WebSocketDisconnect:
-        manager.disconnect(websocket)
-        await manager.broadcast(f"Client  left the chat")
+@app.post("/admin/table")
+def create_admin_table(request_data):
+    table_manager.create_table(request_data)
+    print(table_manager.get_tables())
 
 
-@app.websocket("/table/{table_id}")
-async def administrate_table(
-    websocket: WebSocket,
-    table_id: str,
-):
-    print("Got to 1")
-    await manager.connect(websocket)
-    print("Got to 2")
-    try:
-        while True:
-            print("Got to 3")
-
-            request_data = await websocket.receive_json()
-            print("Got to 4")
-
-            table = create_table(request_data)
-            await manager.send_personal_message(f"You wrote: {table}", websocket)
-            # await manager.broadcast(f"Client #{client_id} says: {data}")
-    except WebSocketDisconnect:
-        manager.disconnect(websocket)
-        await manager.broadcast(f"Client  left the chat")
+#
+#
+# @app.websocket("/admin/table/")
+# async def administrate_table(websocket: WebSocket):
+#     print("Got to 1")
+#     await manager.connect(websocket)
+#     print("Got to 2")
+#     try:
+#         while True:
+#             print("Got to 3")
+#
+#             request_data = await websocket.receive_json()
+#             print("Got to 4")
+#
+#             table = create_table(request_data)
+#             await manager.send_personal_message(f"You wrote: {table}", websocket)
+#             # await manager.broadcast(f"Client #{client_id} says: {data}")
+#     except WebSocketDisconnect:
+#         manager.disconnect(websocket)
+#         await manager.broadcast(f"Client  left the chat")
+#
+#
+# @app.websocket("/table/{table_id}")
+# async def administrate_table(
+#     websocket: WebSocket,
+#     table_id: str,
+# ):
+#     print("Got to 1")
+#     await manager.connect(websocket)
+#     print("Got to 2")
+#     try:
+#         while True:
+#             print("Got to 3")
+#
+#             request_data = await websocket.receive_json()
+#             print("Got to 4")
+#
+#             table = create_table(request_data)
+#             await manager.send_personal_message(f"You wrote: {table}", websocket)
+#             # await manager.broadcast(f"Client #{client_id} says: {data}")
+#     except WebSocketDisconnect:
+#         manager.disconnect(websocket)
+#         await manager.broadcast(f"Client  left the chat")

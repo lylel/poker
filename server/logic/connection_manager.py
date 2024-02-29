@@ -1,9 +1,11 @@
+import asyncio
 from collections import defaultdict
 
 from starlette.websockets import WebSocket
 
 from client_events.events import InvalidActionSubmittedEvent
 from models.round import Round
+from utils import timer
 
 
 class ConnectionManager:
@@ -54,37 +56,40 @@ class TableEventManager:
         )
         return conn
 
-    def push_to_player(self, seat_i, event):
-        self.get_seat_conn(seat_i).send_json(event)
+    async def push_to_player(self, seat_i, event):
+        await self.get_seat_conn(seat_i).send_json(event)
 
     def broadcast_to_seats(self, seats, event):
         pass
 
-    def broadcast_to_table(self, event):
+    async def broadcast_to_table(self, event):
         for seat_i, seat in enumerate(self.seats):
             if seat:
-                self.get_seat_conn(seat_i=seat_i).send_json(event)
+                await self.get_seat_conn(seat_i=seat_i).send_json(event)
 
-    def push_to_conn(self, conn: WebSocket, event):
-        conn.send_json(event)
+    async def push_to_conn(self, conn: WebSocket, event):
+        await conn.send_json(event)
 
-    async def wait_for_event_from_seat(self, seat_i, round: Round):
-        conn = self.get_seat_conn(seat_i)
+    async def get_action_from_player(self, round, time_limit=60):
+        get_action_task = asyncio.create_task(self.wait_for_event_from_player(round=round))
+        clock_task = asyncio.create_task(timer(time_limit))
+
+        done, pending = await asyncio.wait(
+            [get_action_task, clock_task], return_when=asyncio.FIRST_COMPLETED
+        )
+
+        return get_action_task.result() if get_action_task in done else None
+
+    async def wait_for_event_from_player(self, round: Round):
+        conn = self.get_seat_conn(round.current_seat_i)
         while True:
             action_event = await conn.receive_json()
             if round.act(action_event):
                 return action_event
             else:
-                self.push_to_player(seat_i=seat_i, event=InvalidActionSubmittedEvent())
-
-    async def wait_for_event_from(self, conn: WebSocket, valid):
-        while True:
-            action = await conn.receive_json()
-            if valid(action):
-                return action
-            else:
-                # Define push
-                self.push_to_player(InvalidActionSubmittedEvent())
+                await self.push_to_player(
+                    seat_i=round.current_seat_i, event=InvalidActionSubmittedEvent()
+                )
 
 
 async def get_user_input(websocket: WebSocket):

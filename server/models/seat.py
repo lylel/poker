@@ -8,3 +8,7 @@ class Seat:
         self.is_sitting_in = sitting_in
         self.state = PlayerStatus.INIT
         self.chips_put_in = 0
+        self.cards = []
+
+    def set_hole_cards(self, cards):
+        self.cards.extend(cards)
