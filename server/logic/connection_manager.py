@@ -68,7 +68,7 @@ class TableEventManager:
     def push_to_conn(self, conn: WebSocket, event):
         conn.send_json(event)
 
-    def wait_for_event_from_seat(self, seat_i, round: Round):
+    async def wait_for_event_from_seat(self, seat_i, round: Round):
         conn = self.get_seat_conn(seat_i)
         while True:
             action_event = await conn.receive_json()
@@ -77,7 +77,7 @@ class TableEventManager:
             else:
                 self.push_to_player(seat_i=seat_i, event=InvalidActionSubmittedEvent())
 
-    def wait_for_event_from(self, conn: WebSocket, valid):
+    async def wait_for_event_from(self, conn: WebSocket, valid):
         while True:
             action = await conn.receive_json()
             if valid(action):

@@ -1,8 +1,8 @@
 import copy
 import uuid
-from enum import Enum
 
 from models.hand import Hand
+from models.seat import Seat
 
 
 class CasinoFloor:
@@ -14,13 +14,6 @@ class CasinoFloor:
 
     def remove_table(self, table_id):
         pass
-
-
-class Seat:
-    def __init__(self, player_id, chips, sitting_in=False):
-        self.player_id = player_id
-        self.chips = chips
-        self.is_sitting_in = sitting_in
 
 
 class Table:
@@ -151,34 +144,3 @@ class Table:
 class Board:
     def __init__(self):
         self.cards = []
-
-
-class Action(Enum):
-    CHECK = "check"
-    CALL = "call"
-    BET = "bet"
-    RAISE = "raise"
-    FOLD = "fold"
-
-
-class SeatStatus(Enum):
-    pass
-
-
-class PlayerStatus(Enum):
-    INIT = "init"
-    CHECK = "check"
-    CALL = "call"
-    BET = "bet"
-    RAISE = "raise"
-    FOLD = "fold"
-
-
-class RoundState:
-    START = "start"
-    CHECKED = "checked"
-    CALLED = "called"
-    BET = "bet"
-    RAISE = "raise"
-    ALL_IN = "all-in"
-    END = "end"

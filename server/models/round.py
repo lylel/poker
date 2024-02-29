@@ -1,67 +1,39 @@
-from models.table import Action, PlayerStatus
+from models.enums import Action, PlayerStatus
+from models.seat import Seat
 
 
 class Round:
-    def __init__(self, seats, sb_i, bb_i, button_i, current_i, bb):
+    def __init__(self, seats, first_to_act_i, bb, require_blinds=False):
         self.bb = bb
         self.seats: list[Seat] = seats
-        self.current_i = sb_i
-        self.last_bettor = current_i
-        self.current_bet = 0
-        self.minimum_bet = 0
+        self.current_i = first_to_act_i
+        self.last_bettor_i = first_to_act_i
         self.has_started = False
+        self.current_bet = 0
+        self.minimum_raise_allowed = 0
+        self.require_blinds = require_blinds
 
-    def act(self, action_event):
-        action, amount = action_event["type"], action_event["amount"]
-        if action == Action.CHECK:
-            if self.current_bet == 0:
-                self.seats[self.current_i].state = PlayerStatus.CHECK
-            else:
-                return False
-        elif action == Action.CALL:
-            self.seats[self.current_i].bet = self.current_bet
-            self.seats[self.current_i].state = PlayerStatus.CALL
+    @property
+    def action_map(self):
+        return {
+            Action.CHECK.value: self.check,
+            Action.BET.value: self.bet,
+            Action.CALL.value: self.call,
+            Action.RAISE.value: self.raise_,
+            Action.FOLD.value: self.fold,
+        }
 
-        elif action == Action.BET:
-            if not amount:
-                return False
-            if self.current_bet == 0:
-                if amount < self.bb:
-                    return False
-                self.current_bet = amount
-                self.minimum_bet = amount
-                self.seats[self.current_i].state = PlayerStatus.BET
-                self.seats[self.current_i].bet = self.current_bet
-                self.last_bettor = self.current_i
+    @property
+    def pot(self):
+        return sum(seat.chips_put_in for seat in self.seats)
 
-            else:
-                return False
-        elif action == Action.RAISE:
-            if self.current_bet != 0:
-                if amount < self.minimum_bet:
-                    return False
-                # TODO: Figure out min raise
-                self.minimum_bet = amount
-                self.current_bet += amount
-                self.seats[self.current_i].bet = self.current_bet
-                self.seats[self.current_i].state = PlayerStatus.RAISE
-                self.last_bettor = self.current_i
-            return False
-        elif action == Action.FOLD:
-            self.seats[self.current_i].state = PlayerStatus.FOLD
-
-        self.next_player()
-        self.has_started = True
-        return True
-
-    def next_player(self):
-        self.current_i = (self.current_i + 1) % len(self.seats)
-        while self.seats[self.current_i].state == PlayerStatus.FOLD:
-            self.current_i = (self.current_i + 1) % len(self.seats)
+    @property
+    def current_player(self):
+        return self.seats[self.current_i]
 
     @property
     def is_done(self):
-        return self.has_started and self.last_bettor == self.current_i
+        return self.everyone_has_folded or self.has_started and self.last_bettor_i == self.current_i
 
     @property
     def all_checked(self):
@@ -71,15 +43,84 @@ class Round:
         )
 
     @property
-    def has_everyone_folded(self):
+    def everyone_has_folded(self):
         return sum(seat.state != PlayerStatus.FOLD for seat in self.seats) == 1
 
+    def act(self, action_event):
+        if not (action := action_event.get("type")) or action not in self.action_map:
+            return False
 
-class Seat:
-    def __init__(self):
-        self.state = PlayerStatus.INIT
-        self.bet = 0
-        self.raises = []
+        amount = action_event.get("amount")
+        if self.action_map[action](amount=amount):
+            self.has_started = True
+            self.set_next_player()
+            return True
+        return False
 
-    def __repr__(self):
-        return f"State: {self.state}, Bet: {self.bet}"
+    def check(self, **kwargs):
+        if not self.current_bet:
+            self.current_player.state = PlayerStatus.CHECK
+            return True
+        return False
+
+    def bet(self, **kwargs):
+        amount = kwargs["amount"]
+        if not amount or amount < self.bb or amount > self.current_player.chips:
+            return False
+
+        if not self.current_bet:
+            self.current_bet = self.minimum_raise_allowed = (
+                self.current_player.chips_put_in
+            ) = amount
+            self.current_player.chips -= amount
+            self.last_bettor_i = self.current_i
+            return True
+        return False
+
+    def call(self, **kwargs):
+        if self._amount_to_call < self.current_player.chips:
+            self.current_player.chips -= self._amount_to_call
+            self.current_player.chips_put_in = self.current_bet
+            return True
+        return False
+
+    def raise_(self, **kwargs):
+        if not (total_put_in := kwargs.get("amount")):
+            return False
+
+        amount_raised = total_put_in - self.current_bet
+        amount_needed_to_put_in = total_put_in - self.current_player.chips_put_in
+
+        # TODO: How to handle all-in raise that is smaller than min raise. e.g. BB: 10, Bet 10, Raise all-in 15
+        if (
+            not self.current_bet
+            or not total_put_in
+            or amount_raised < self.minimum_raise_allowed
+            or amount_needed_to_put_in > self.current_player.chips
+        ):
+            return False
+
+        self.minimum_raise_allowed = amount_raised
+
+        self.current_player.chips -= amount_needed_to_put_in
+        self.current_player.chips_put_in = total_put_in
+        self.current_bet = total_put_in
+
+        self.last_bettor_i = self.current_i
+        return True
+
+    def fold(self, **kwargs):
+        self.current_player.state = PlayerStatus.FOLD
+        return True
+
+    def set_next_player(self):
+        self.current_i = (self.current_i + 1) % len(self.seats)
+        while (
+            not self.everyone_has_folded
+            and self.current_player.state == PlayerStatus.FOLD
+        ):
+            self.current_i = (self.current_i + 1) % len(self.seats)
+
+    @property
+    def _amount_to_call(self):
+        return self.current_bet - self.current_player.chips_put_in

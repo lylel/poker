@@ -1,6 +1,7 @@
 from pydantic import BaseModel
 
-from models.table import Action, Seat
+from models.enums import Action
+from models.seat import Seat
 
 
 class TableStateRefreshEvent(BaseModel):

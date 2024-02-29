@@ -11,45 +11,39 @@ from client_events.events import (
     SeatPostedSmallBlind,
     SeatPostedBigBlind,
     UpdatePot,
-    PromptAction, CheckedEvent, ACTION_EVENT_MAP,
+    PromptAction,
 )
-from models.table import Table, Seat, Action
+from models.table import Table
+from models.enums import Action
+from models.seat import Seat
 from utils import timer
 
 
 class Hand:
     states = [
         "init",
-        "Preflop",
-        "preflop_betting",
-        "Flop",
-        "Turn",
-        "Flop_Betting",
-        "Turn_Betting",
-        "River",
-        "River_Betting",
-        "Showdown",
+        "preflop",
+        "flop",
+        "turn",
+        "river",
+        "showdown",
         "end",
     ]
 
     transitions = [
         {"trigger": "proceed", "source": "end", "dest": "init"},
-        {"trigger": "proceed", "source": "init", "dest": "Preflop"},
-        {"trigger": "proceed", "source": "Preflop", "dest": "preflop_betting"},
+        {"trigger": "proceed", "source": "init", "dest": "preflop"},
+        {"trigger": "proceed", "source": "preflop", "dest": "flop"},
         {
             "trigger": "proceed",
-            "source": "Preflop",
+            "source": "preflop",
             "dest": "end",
             "condition": "is_only_one_left",
         },
-        {"trigger": "proceed", "source": "preflop_betting", "dest": "Flop"},
-        {"trigger": "proceed", "source": "Flop", "dest": "Flop_Betting"},
-        {"trigger": "proceed", "source": "Flop_Betting", "dest": "Turn"},
-        {"trigger": "proceed", "source": "Turn", "dest": "Turn_Betting"},
-        {"trigger": "proceed", "source": "Turn_Betting", "dest": "River"},
-        {"trigger": "proceed", "source": "River", "dest": "River_Betting"},
-        {"trigger": "proceed", "source": "River_Betting", "dest": "Showdown"},
-        {"trigger": "proceed", "source": "Showdown", "dest": "end"},
+        {"trigger": "proceed", "source": "flop", "dest": "turn"},
+        {"trigger": "proceed", "source": "turn", "dest": "river"},
+        {"trigger": "proceed", "source": "river", "dest": "showdown"},
+        {"trigger": "proceed", "source": "showdown", "dest": "end"},
     ]
 
     def __init__(self, table, seats, sb, bb, sb_i, bb_i, button_i, is_heads_up):
@@ -62,7 +56,7 @@ class Hand:
         self.bb_i = bb_i
         self.is_heads_up = is_heads_up
         self.current_player_i = None
-        self.live_round = None
+        self.round = None
         self.last_to_act = button_i
         self.pot = 0
         self.bets = []
@@ -81,31 +75,27 @@ class Hand:
         if self.is_heads_up:
             self.current_player_i = self.sb_i
 
-        self.live_round = Round(
+        self.round = Round(
             seats=self.seats,
-            sb_i=sb_i,
-            bb_i=bb_i,
-            button_i=button_i,
-            current_i=bb_i,
+            first_to_act_i=sb_i,
             bb=self.bb,
         )
 
-        await asyncio.sleep(1)
+        # await asyncio.sleep(1)
 
         self.proceed()
 
     def on_enter_preflop(self):
         self.deal_hole_cards()
-        while not self.live_round.is_done:
-            # TODO: Figure out options
+        while not self.round.is_done:
             self.prompt_current_player(options=[Action.CALL, Action.RAISE, Action.FOLD])
         self.proceed()
 
     def on_enter_turn(self):
         # Does this need to be a new object everytime
-        self.live_round = Round()
+        self.round = Round()
         # TODO: don't allow players to sit in in the middle of a hand
-        while not self.live_round.is_done:
+        while not self.round.is_done:
             # TODO: Figure out options
             self.prompt_current_player(options=[Action.CALL, Action.RAISE, Action.FOLD])
         self.proceed()
@@ -143,26 +133,31 @@ class Hand:
                 #         self.get_seat_conn(seat_i=other_seat_i).send_json(
                 #             DealFaceDownHoleCards(seat_i=seat_i).model_dump())
 
-
-    def prompt_current_player(self, options, time):
+    async def prompt_current_player(self, options, time):
         self.event_manager.push_to_player(
             self.current_player_i, PromptAction(options=options)
         )
 
-        action = asyncio.create_task(self.event_manager.wait_for_event_from_seat(seat_i=self.current_player_i, round=self.live_round))
+        action = asyncio.create_task(
+            self.event_manager.wait_for_event_from_seat(
+                seat_i=self.current_player_i, round=self.round
+            )
+        )
         clock_task = asyncio.create_task(timer(time))
 
-        done, pending = await asyncio.wait([action, clock_task], return_when=asyncio.FIRST_COMPLETED)
+        done, pending = await asyncio.wait(
+            [action, clock_task], return_when=asyncio.FIRST_COMPLETED
+        )
 
         if action in done:
             action_event = action.result()
+            #
+            # self.event_manager.broadcast_to_table(
+            #     event=ACTION_EVENT_MAP[action_event["type"](seat_i=self.current_player_i, table_id=self.table.tid)))
 
-            self.event_manager.broadcast_to_table(
-                event=ACTION_EVENT_MAP[action_event["type"](seat_i=self.current_player_i, table_id=self.table.tid)))
-
-        else:
-            #TODO: FIX
-            if self.live_round.all_checked:
-                self.event_manager.broadcast_to_table(event=CheckedEvent(seat_i=self.current_player_i, table_id=self.table.tid))
-
-            # event_manager
+        # else:
+        #     #TODO: FIX
+        #     if self.live_round.all_checked:
+        #         self.event_manager.broadcast_to_table(event=CheckedEvent(seat_i=self.current_player_i, table_id=self.table.tid))
+        #
+        #     # event_manager
