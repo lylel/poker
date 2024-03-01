@@ -2,7 +2,6 @@ import asyncio
 
 from transitions import Machine
 
-from constants import COMPLETE_BOARD_SIZE
 from models.round import Round
 from models.deck import Deck
 from client_events.events import (
@@ -69,7 +68,15 @@ class Hand:
     ]
 
     def __init__(
-        self, seats, sb, bb, sb_i, bb_i, event_manager, pause_between_rounds=1
+        self,
+        seats,
+        sb,
+        bb,
+        sb_i,
+        bb_i,
+        event_manager,
+        evaluator,
+        pause_between_rounds=1,
     ):
         self.seats: list[Seat] = seats
         self.sb = sb
@@ -85,8 +92,9 @@ class Hand:
         self.round = Round(
             seats=self.seats,
             first_to_act_i=sb_i,
-            min_raise=self.bb,
+            bb=self.bb,
         )
+        self.evaluator = evaluator
         self.machine = Machine(
             model=self, states=Hand.states, transitions=Hand.transitions, initial="init"
         )
