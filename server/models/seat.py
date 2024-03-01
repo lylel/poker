@@ -6,9 +6,16 @@ class Seat:
         self.player_id = player_id
         self.chips = chips
         self.is_sitting_in = sitting_in
-        self.state = PlayerStatus.INIT
-        self.chips_put_in = 0
         self.cards = []
+        self.has_folded = True
+        self.chips_put_in = 0
 
     def set_hole_cards(self, cards):
-        self.cards.extend(cards)
+        self.cards = cards
+
+    def new_hand(self):
+        self.has_folded = False
+        self.cards = []
+
+    def next_round(self):
+        self.chips_put_in = 0

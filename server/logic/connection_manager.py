@@ -71,7 +71,9 @@ class TableEventManager:
         await conn.send_json(event)
 
     async def get_action_from_player(self, round, time_limit=60):
-        get_action_task = asyncio.create_task(self.wait_for_event_from_player(round=round))
+        get_action_task = asyncio.create_task(
+            self.wait_for_event_from_player(round=round)
+        )
         clock_task = asyncio.create_task(timer(time_limit))
 
         done, pending = await asyncio.wait(

@@ -44,16 +44,60 @@ class InvalidActionSubmittedEvent(BaseModel):
     name: str = "InvalidActionSubmittedEvent"
 
 
+class FlipHoleCardsEvent(BaseModel):
+    name: str = "flipHoleCardsEvent"
+    seats_i: list[int] = []
+    cards: list[list[int]] = []
+
+
+class DealFlopEvent(BaseModel):
+    name: str = "dealFlopEvent"
+    cards: list[int]
+
+
+class DealTurnEvent(BaseModel):
+    name: str = "dealTurnEvent"
+    cards: list[int]
+
+
+class DealRiverEvent(BaseModel):
+    name: str = "dealRiverEvent"
+    cards: list[int]
+
+
 class CheckEvent(BaseModel):
     name: str = "checkEvent"
     seat_i: int
-    table_id: str  # TODO: is this needed?
 
 
 class FoldEvent(BaseModel):
     name: str = "foldEvent"
     seat_i: int
-    table_id: str  # TODO: is this needed?
 
 
-ACTION_EVENT_MAP = {}
+class BetEvent(BaseModel):
+    name: str = "betEvent"
+    seat_i: int
+    amount: int
+
+
+class CallEvent(BaseModel):
+    name: str = "callEvent"
+    seat_i: int
+
+
+class RaiseEvent(BaseModel):
+    name: str = "raiseEvent"
+    seat_i: int
+    amount_i: int
+
+
+# TODO: AllInEvent
+
+ACTION_EVENT_MAP = {
+    Action.CHECK.value: CheckEvent,
+    Action.BET.value: BetEvent,
+    Action.CALL.value: CallEvent,
+    Action.FOLD.value: FoldEvent,
+    Action.RAISE.value: RaiseEvent,
+}

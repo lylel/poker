@@ -3,22 +3,22 @@ from models.seat import Seat
 
 
 class Round:
-    def __init__(self, seats, first_to_act_i, min_raise):
-        self.seats: list[Seat] = seats
+    def __init__(self, seats, first_to_act_i, bb):
+        self.seats: list[Seat | None] = seats
         self.current_seat_i = first_to_act_i
         self.last_bettor_i = first_to_act_i
         self.has_started = False
         self.current_bet = 0
-        self.minimum_raise_allowed = min_raise
+        self.minimum_raise_allowed = bb
 
-    def get_small_blind(self, sb_i, sb):
-        self.seats[sb_i].chips -= sb
-        self.seats[sb_i].chips_put_in = sb
+        if (
+            not self.current_player
+            or not self.current_player.is_sitting_in
+            or self.current_player.has_folded
+        ):
+            self.set_next_player()
+            self.last_bettor_i = self.current_seat_i
 
-    def get_big_blind(self, bb_i, bb):
-        self.seats[bb_i].chips -= bb
-        self.seats[bb_i].chips_put_in = bb
-        self.last_bettor_i #
     @property
     def action_map(self):
         return {
@@ -46,15 +46,24 @@ class Round:
         )
 
     @property
+    def actions_allowed(self):
+        options = [Action.FOLD.value]
+        if self.no_action_required:
+            options.extend([Action.CHECK.value, Action.BET.value])
+        if self._player_has_not_called:
+            options.extend([Action.CALL.value, Action.RAISE.value])
+
+        return options
+
+    @property
     def no_action_required(self):
-        # TODO: Handle Case: Preflop, everyone has called
-        return all(
-            seat.state in (PlayerStatus.CHECK, PlayerStatus.FOLD, PlayerStatus.INIT) for seat in self.seats
-        )
+        return not self.current_bet or self._current_player_has_called
 
     @property
     def everyone_has_folded(self):
-        return sum(seat.state != PlayerStatus.FOLD for seat in self.seats) == 1
+        return (
+            sum(seat.is_sitting_in and not seat.has_folded for seat in self.seats) == 1
+        )
 
     def act(self, action_event):
         if not (action := action_event.get("type")) or action not in self.action_map:
@@ -68,14 +77,18 @@ class Round:
         return False
 
     def check(self, **kwargs):
-        if not self.current_bet:
-            self.current_player.state = PlayerStatus.CHECK
+        if not self.current_bet or self._current_player_has_called:
+            self.current_player.state = PlayerStatus.CHECK.value
             return True
         return False
 
     def bet(self, **kwargs):
         amount = kwargs["amount"]
-        if not amount or amount < self.min_raise or amount > self.current_player.chips:
+        if (
+            not amount
+            or amount < self.minimum_raise_allowed
+            or amount > self.current_player.chips
+        ):
             return False
 
         if not self.current_bet:
@@ -120,17 +133,34 @@ class Round:
         return True
 
     def fold(self, **kwargs):
-        self.current_player.state = PlayerStatus.FOLD
+        self.current_player.state = PlayerStatus.FOLD.value
         return True
+
+    def get_small_blind(self, sb_i, sb):
+        self.seats[sb_i].chips -= sb
+        self.seats[sb_i].chips_put_in = sb
+
+    def get_big_blind(self, bb_i, bb):
+        self.seats[bb_i].chips -= bb
+        self.seats[bb_i].chips_put_in = bb
 
     def set_next_player(self):
         self.current_seat_i = (self.current_seat_i + 1) % len(self.seats)
-        while (
-            not self.everyone_has_folded
-            and self.current_player.state == PlayerStatus.FOLD
-        ):
+        while not self.everyone_has_folded and self.current_player.has_folded:
             self.current_seat_i = (self.current_seat_i + 1) % len(self.seats)
+
+    @property
+    def players_are_all_in(self):
+        return sum(seat.chips > 0 and seat.is_sitting_in for seat in self.seats) <= 1
 
     @property
     def _amount_to_call(self):
         return self.current_bet - self.current_player.chips_put_in
+
+    @property
+    def _current_player_has_called(self):
+        return self.current_bet and self.current_player.chips_put_in == self.current_bet
+
+    @property
+    def _player_has_not_called(self):
+        return self.current_player.chips_put_in < self.current_bet

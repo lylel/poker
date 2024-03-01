@@ -21,7 +21,7 @@ class Table:
 
     def continue_(self):
         if self.round.has_not_started:
-            self.round.deal_hole_cards()
+            self.round._deal_hole_cards()
         else:
             pass
 
