@@ -2,6 +2,10 @@ from models.enums import Action, PlayerStatus
 from models.seat import Seat
 
 
+class NoRemainingPlayerFoundException:
+    pass
+
+
 class Round:
     def __init__(self, seats, first_to_act_i, bb):
         self.seats: list[Seat | None] = seats
@@ -11,6 +15,7 @@ class Round:
         self.current_bet = 0
         self.minimum_raise_allowed = bb
 
+        # TODO: Check if enough players to start
         if (
             not self.current_player
             or not self.current_player.is_sitting_in
@@ -64,6 +69,18 @@ class Round:
         return (
             sum(seat.is_sitting_in and not seat.has_folded for seat in self.seats) == 1
         )
+
+    @property
+    def players_are_all_in(self):
+        return sum(seat.chips > 0 and seat.is_sitting_in for seat in self.seats) <= 1
+
+    @property
+    def last_man_standing_i(self):
+        if self.everyone_has_folded:
+            for seat_i, seat in enumerate(self.seats):
+                if seat.is_sitting_in and not seat.has_folded:
+                    return seat_i
+        raise NoRemainingPlayerFoundException
 
     def act(self, action_event):
         if not (action := action_event.get("type")) or action not in self.action_map:
@@ -143,15 +160,12 @@ class Round:
     def get_big_blind(self, bb_i, bb):
         self.seats[bb_i].chips -= bb
         self.seats[bb_i].chips_put_in = bb
+        self.current_bet = bb
 
     def set_next_player(self):
         self.current_seat_i = (self.current_seat_i + 1) % len(self.seats)
         while not self.everyone_has_folded and self.current_player.has_folded:
             self.current_seat_i = (self.current_seat_i + 1) % len(self.seats)
-
-    @property
-    def players_are_all_in(self):
-        return sum(seat.chips > 0 and seat.is_sitting_in for seat in self.seats) <= 1
 
     @property
     def _amount_to_call(self):

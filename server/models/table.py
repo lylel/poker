@@ -40,12 +40,6 @@ class Table:
             return True
         return False
 
-    def post_small_blind(self, account_id):
-        pass
-
-    def post_big_blind(self, account_id):
-        pass
-
     def assign_blinds(self):
         if not self.has_minimum_players_to_start:
             return False
@@ -92,9 +86,7 @@ class Table:
             bb=self.bb,
             sb_i=self.current_sb,
             bb_i=self.current_bb,
-            button_i=self.current_sb,
         )
-        self.current_hand.proceed()
 
     def _set_starting_blinds(self, seat_i):
         self.current_bb = seat_i
@@ -128,8 +120,3 @@ class Table:
 
     def __str__(self):
         return f"Table Name: {self.name}, Max Players: {self.max_seats}, Small Blind: {self.sb}, Big Blind: {self.bb}"
-
-
-class Board:
-    def __init__(self):
-        self.cards = []

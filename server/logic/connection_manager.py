@@ -8,26 +8,8 @@ from models.round import Round
 from utils import timer
 
 
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: list[WebSocket] = []
 
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.append(websocket)
-
-    def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
-
-    async def send_personal_message(self, message: str, websocket: WebSocket):
-        await websocket.send_text(message)
-
-    async def broadcast(self, message: str):
-        for connection in self.active_connections:
-            await connection.send_text(message)
-
-
-class TableConnectionManager(ConnectionManager):
+class TableConnectionManager:
     def __init__(self):
         super().__init__()
         self._table_player_connection_map = defaultdict(dict)
@@ -38,7 +20,7 @@ class TableConnectionManager(ConnectionManager):
 
     async def disconnect_from_table(self, table_id, player_id, websocket: WebSocket):
         self._table_player_connection_map[table_id][player_id] = websocket
-        await websocket.accept()
+        await websocket.close()
 
     def get_connection(self, player_id, table_id) -> WebSocket:
         return self._table_player_connection_map.get(table_id, {}).get(player_id, None)
@@ -58,9 +40,6 @@ class TableEventManager:
 
     async def push_to_player(self, seat_i, event):
         await self.get_seat_conn(seat_i).send_json(event)
-
-    def broadcast_to_seats(self, seats, event):
-        pass
 
     async def broadcast_to_table(self, event):
         for seat_i, seat in enumerate(self.seats):
@@ -92,14 +71,3 @@ class TableEventManager:
                 await self.push_to_player(
                     seat_i=round.current_seat_i, event=InvalidActionSubmittedEvent()
                 )
-
-
-async def get_user_input(websocket: WebSocket):
-    allowed_commands = ["call", "raise"]
-    while True:
-        action = await websocket.receive_text()
-        if action in allowed_commands:
-            print("did this work@@@@%^(*#&%OI*Y%OIYTOI@YTUIOYUT")
-            return action
-        else:
-            await websocket.send_text("Invalid command. Please enter a valid command.")

@@ -1,12 +1,12 @@
 
-WEBSOCKET ws://localhost:8000/admin/table/
-Content-Type: application/json // We use it for highlighting
-
+WEBSOCKET ws://localhost:8000/table/abc/player/a1
+Content-Type: application/json
 ===
-{
-  "name": "Cooker",
-  "maxSeats": 2,
-  "sb": 1,
-  "bb": 2
-}
 === wait-for-server
+
+###
+WEBSOCKET ws://localhost:8000/table/abc/player/b2
+Content-Type: application/json
+===
+=== wait-for-server
+

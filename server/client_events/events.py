@@ -92,6 +92,11 @@ class RaiseEvent(BaseModel):
     amount_i: int
 
 
+class DeclareWinnerEvent(BaseModel):
+    name: str = "declareWinnerEvent"
+    winning_seat_i: int
+
+
 # TODO: AllInEvent
 
 ACTION_EVENT_MAP = {

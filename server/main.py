@@ -1,7 +1,12 @@
+import asyncio
+
+import uvicorn
 from fastapi import FastAPI
 
 from global_state import table_manager
-from logic.connection_manager import TableConnectionManager
+from logic.connection_manager import TableConnectionManager, TableEventManager
+from models.hand import Hand
+from models.seat import Seat
 
 app = FastAPI()
 
@@ -16,57 +21,35 @@ async def say_hello(name: str):
     return {"message": f"Hello {name}"}
 
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, WebSocket
 
-from logic.table_manager import create_table
 
 app = FastAPI()
-
-html = """
-<!DOCTYPE html>
-<html>
-    <head>
-        <title>Chat</title>
-    </head>
-    <body>
-        <h1>WebSocket Chat</h1>
-        <h2>Your ID: <span id="ws-id"></span></h2>
-        <form action="" onsubmit="sendMessage(event)">
-            <input type="text" id="messageText" autocomplete="off"/>
-            <button>Send</button>
-        </form>
-        <ul id='messages'>
-        </ul>
-        <script>
-            var client_id = Date.now()
-            document.querySelector("#ws-id").textContent = client_id;
-            var ws = new WebSocket(`ws://localhost:8000/ws/${client_id}`);
-            ws.onmessage = function(event) {
-                var messages = document.getElementById('messages')
-                var message = document.createElement('li')
-                var content = document.createTextNode(event.data)
-                message.appendChild(content)
-                messages.appendChild(message)
-            };
-            function sendMessage(event) {
-                var input = document.getElementById("messageText")
-                ws.send(input.value)
-                input.value = ''
-                event.preventDefault()
-            }
-        </script>
-    </body>
-</html>
-"""
 
 
 table_connection_manager = TableConnectionManager()
 
+TABLE_ID_HAND_MAP: dict[str, Hand] = {}
 
-@app.get("/")
+
+@app.get("/start")
 async def get():
-    return HTMLResponse(html)
+    seat_1 = Seat(player_id="a1", chips=1000)
+    seat_2 = Seat(player_id="b2", chips=1000)
+    seats = [seat_1, seat_2]
+    event_manager = TableEventManager(table_id="abc", seats=seats, table_connection_manager=table_connection_manager)
+
+    await event_manager.broadcast_to_table({"hi": "bye"})
+    hand = Hand(
+        seats=[seat_1, seat_2],
+        sb=5,
+        bb=10,
+        sb_i=0,
+        bb_i=1,
+        event_manager=event_manager,
+    )
+    await hand.begin_preflop()
+    return {"hello": "ok"}
 
 
 @app.post("/admin/table")
@@ -77,25 +60,14 @@ def create_admin_table(request_data):
 
 #
 #
-# @app.websocket("/admin/table/")
-# async def administrate_table(websocket: WebSocket):
-#     print("Got to 1")
-#     await manager.connect(websocket)
-#     print("Got to 2")
-#     try:
-#         while True:
-#             print("Got to 3")
-#
-#             request_data = await websocket.receive_json()
-#             print("Got to 4")
-#
-#             table = create_table(request_data)
-#             await manager.send_personal_message(f"You wrote: {table}", websocket)
-#             # await manager.broadcast(f"Client #{client_id} says: {data}")
-#     except WebSocketDisconnect:
-#         manager.disconnect(websocket)
-#         await manager.broadcast(f"Client  left the chat")
-#
+@app.websocket("/table/{table_id}/player/{player_id}")
+async def connect(table_id, player_id, websocket: WebSocket):
+    await table_connection_manager.connect_to_table(table_id, player_id, websocket)
+    while True:
+        await asyncio.sleep(30)
+
+
+
 #
 # @app.websocket("/table/{table_id}")
 # async def administrate_table(
@@ -118,3 +90,6 @@ def create_admin_table(request_data):
 #     except WebSocketDisconnect:
 #         manager.disconnect(websocket)
 #         await manager.broadcast(f"Client  left the chat")
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="0.0.0.0", port=8000)
