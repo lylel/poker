@@ -37,7 +37,9 @@ async def get():
     seat_1 = Seat(player_id="a1", chips=1000)
     seat_2 = Seat(player_id="b2", chips=1000)
     seats = [seat_1, seat_2]
-    event_manager = TableEventManager(table_id="abc", seats=seats, table_connection_manager=table_connection_manager)
+    event_manager = TableEventManager(
+        table_id="abc", seats=seats, table_connection_manager=table_connection_manager
+    )
 
     await event_manager.broadcast_to_table({"hi": "bye"})
     hand = Hand(
@@ -65,7 +67,6 @@ async def connect(table_id, player_id, websocket: WebSocket):
     await table_connection_manager.connect_to_table(table_id, player_id, websocket)
     while True:
         await asyncio.sleep(30)
-
 
 
 #

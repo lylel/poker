@@ -8,7 +8,6 @@ from models.round import Round
 from utils import timer
 
 
-
 class TableConnectionManager:
     def __init__(self):
         super().__init__()

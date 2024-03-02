@@ -66,9 +66,10 @@ class Round:
 
     @property
     def everyone_has_folded(self):
-        return (
+        has_folded = (
             sum(seat.is_sitting_in and not seat.has_folded for seat in self.seats) == 1
         )
+        return has_folded
 
     @property
     def players_are_all_in(self):
@@ -150,7 +151,7 @@ class Round:
         return True
 
     def fold(self, **kwargs):
-        self.current_player.state = PlayerStatus.FOLD.value
+        self.current_player.has_folded = True
         return True
 
     def get_small_blind(self, sb_i, sb):

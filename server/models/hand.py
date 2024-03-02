@@ -1,4 +1,3 @@
-
 from phevaluator import evaluate_cards
 
 from models.round import Round
@@ -104,30 +103,38 @@ class Hand:
         # self.proceed()
 
     async def begin_preflop(self):
+        print(f"PREFLOP STARTED !!!!!!!!!!!!")
+
         self.round.get_small_blind(self.sb_i, self.sb)
         self.round.get_big_blind(self.bb_i, self.bb)
         await self.event_manager.broadcast_to_table(
-            SeatPostedSmallBlind(seat_i=self.sb_i, amount=self.sb).model_dump()
+            SeatPostedSmallBlind(seat_i=self.sb_i, amount=self.sb).model_dump_json()
         )
         await self.event_manager.broadcast_to_table(
-            SeatPostedBigBlind(seat_i=self.bb_i, amount=self.bb).model_dump()
+            SeatPostedBigBlind(seat_i=self.bb_i, amount=self.bb).model_dump_json()
         )
-        await self.event_manager.broadcast_to_table(UpdatePot(total=self.pot).model_dump())
+        await self.event_manager.broadcast_to_table(
+            UpdatePot(total=self.pot).model_dump_json()
+        )
         # await asyncio.sleep(self.pause_between_rounds)
         await self._deal_hole_cards()
         while not self.round.is_done:
             await self.prompt_current_player(options=self.round.actions_allowed)
             action_event = await self._get_action_from_current_player()
             action_event = self._handle_no_action_received(action_event)
-            await self._broadcast_action(action_event)
+            await self._broadcast_action(
+                action_event
+            )  # TODO: THIS IS NOT BROADCASTING TO EVERYONE
+        print("COLLECTING CHIPS")
         self._collect_chips()
         if self.everyone_has_folded:
             return self.finish_hand()
-        return self.begin_flop()
+        return await self.begin_flop()
 
-    def begin_flop(self):
+    async def begin_flop(self):
+        print(f"FLOP STARTED !!!!!!!!!!!!")
         # TODO: don't allow players to sit in in the middle of a hand
-        self._deal_flop_cards()
+        await self._deal_flop_cards()
 
         if self.round.players_are_all_in:
             return self.begin_turn()
@@ -135,15 +142,17 @@ class Hand:
         self.round = Round(seats=self.seats, first_to_act_i=self.bb_i, bb=self.bb)
 
         while not self.round.is_done:
-            self.prompt_current_player(options=self.round.actions_allowed)
+            # TODO: This is spazzing I think
+            await self.prompt_current_player(options=self.round.actions_allowed)
 
         self._collect_chips()
         if self.everyone_has_folded:
             return self.finish_hand()
-        return self.begin_turn()
+        return await self.begin_turn()
 
-    def begin_turn(self):
-        self._deal_turn_card()
+    async def begin_turn(self):
+        print(f"TURN STARTED !!!!!!!!!!!!")
+        await self._deal_turn_card()
 
         if self.round.players_are_all_in:
             return self.begin_river()
@@ -151,14 +160,15 @@ class Hand:
         self.round = Round(seats=self.seats, first_to_act_i=self.bb_i, bb=self.bb)
 
         while not self.round.is_done:
-            self.prompt_current_player(options=self.round.actions_allowed)
+            await self.prompt_current_player(options=self.round.actions_allowed)
 
         self._collect_chips()
         if self.everyone_has_folded:
             return self.finish_hand()
-        return self.begin_river()
+        return await self.begin_river()
 
-    def begin_river(self):
+    async def begin_river(self):
+        print(f"RIVER STARTED !!!!!!!!!!!!")
         self._deal_river_card()
 
         if self.round.players_are_all_in:
@@ -167,14 +177,15 @@ class Hand:
         self.round = Round(seats=self.seats, first_to_act_i=self.bb_i, bb=self.bb)
 
         while not self.round.is_done:
-            self.prompt_current_player(options=self.round.actions_allowed)
+            await self.prompt_current_player(options=self.round.actions_allowed)
 
         self._collect_chips()
         if self.everyone_has_folded:
             return self.finish_hand()
-        return self.showdown()
+        return await self.showdown()
 
-    def showdown(self):
+    async def showdown(self):
+        print(f"SHOWDOWN STARTED !!!!!!!!!!!!")
         # TODO: Give option to not flip cards and flip hole cards in order
         flipped_cards = self._flip_cards_over()
 
@@ -182,13 +193,15 @@ class Hand:
         self.event_manager.broadcast_to_table(
             DeclareWinnerEvent(winning_seat_i=self.winning_seat_i).json()
         )
-        return self.finish_hand()
+        return await self.finish_hand()
 
     def finish_hand(self):
+        print(f"FINISH HAND STARTED !!!!!!!!!!!!")
         if self.winning_seat_i is None and self.everyone_has_folded():
             self.winning_seat_i = self.round.last_man_standing_i
         self._push_winnings()
 
+    @property
     def everyone_has_folded(self):
         return self.round.everyone_has_folded
 
@@ -210,11 +223,14 @@ class Hand:
         return action_event
 
     async def _broadcast_action(self, action_event):
+        amount = action_event.get("amount")
+        action_event = ACTION_EVENT_MAP[action_event["type"]](
+            seat_i=self.round.current_seat_i
+        )
+        if amount:
+            action_event.amount = amount
         await self.event_manager.broadcast_to_table(
-            event=ACTION_EVENT_MAP[action_event["type"]](
-                seat_i=self.round.current_seat_i,
-                amount=action_event.get("amount"),
-            )
+            event=action_event.model_dump_json()
         )
 
     def _collect_chips(self):
@@ -229,24 +245,24 @@ class Hand:
                 seat.set_hole_cards(cards)
                 await self.event_manager.push_to_player(
                     seat_i=seat_i,
-                    event=HoleCards(cards=cards).model_dump(),
+                    event=HoleCards(cards=cards).model_dump_json(),
                 )
         # TODO: Push to other players that player received cards for animating?
 
-    def _deal_flop_cards(self):
+    async def _deal_flop_cards(self):
         cards = self.deck.draw_cards(3)
         self.board.extend(cards)
-        self.event_manager.broadcast_to_table(DealFlopEvent(cards=cards).json())
+        await self.event_manager.broadcast_to_table(DealFlopEvent(cards=cards).json())
 
-    def _deal_turn_card(self):
+    async def _deal_turn_card(self):
         cards = self.deck.draw_cards(1)
         self.board.extend(cards)
-        self.event_manager.broadcast_to_table(DealTurnEvent(cards=cards).json())
+        await self.event_manager.broadcast_to_table(DealTurnEvent(cards=cards).json())
 
-    def _deal_river_card(self):
+    async def _deal_river_card(self):
         cards = self.deck.draw_cards(1)
         self.board.extend(cards)
-        self.event_manager.broadcast_to_table(DealRiverEvent(cards=cards).json())
+        await self.event_manager.broadcast_to_table(DealRiverEvent(cards=cards).json())
 
     def _flip_cards_over(self) -> dict:
         hole_cards_event = FlipHoleCardsEvent()
@@ -259,7 +275,7 @@ class Hand:
 
         self.event_manager.broadcast_to_table(hole_cards_event.json())
 
-        return hole_cards_event.model_dump()
+        return hole_cards_event.model_dump_json()
 
     def _determine_winner(self, hole_cards):
         hand_scores = {}
