@@ -22,50 +22,6 @@ from models.seat import Seat
 
 
 class Hand:
-    states = [
-        "init",
-        "preflop",
-        "flop",
-        "turn",
-        "river",
-        "showdown",
-        "end",
-    ]
-
-    transitions = [
-        {"trigger": "proceed", "source": "end", "dest": "init"},
-        {"trigger": "proceed", "source": "init", "dest": "preflop"},
-        {"trigger": "proceed", "source": "preflop", "dest": "flop"},
-        {
-            "trigger": "proceed",
-            "source": "preflop",
-            "dest": "end",
-            "conditions": "everyone_has_folded",
-        },
-        {"trigger": "proceed", "source": "flop", "dest": "turn"},
-        {
-            "trigger": "proceed",
-            "source": "flop",
-            "dest": "end",
-            "conditions": "everyone_has_folded",
-        },
-        {"trigger": "proceed", "source": "turn", "dest": "river"},
-        {
-            "trigger": "proceed",
-            "source": "turn",
-            "dest": "end",
-            "conditions": "everyone_has_folded",
-        },
-        {"trigger": "proceed", "source": "river", "dest": "showdown"},
-        {
-            "trigger": "proceed",
-            "source": "river",
-            "dest": "end",
-            "conditions": "everyone_has_folded",
-        },
-        {"trigger": "proceed", "source": "showdown", "dest": "end"},
-    ]
-
     def __init__(
         self,
         seats,
@@ -94,9 +50,6 @@ class Hand:
             bb=self.bb,
         )
         self.evaluator = evaluator
-        # self.machine = AsyncMachine(
-        #     model=self, states=Hand.states, transitions=Hand.transitions, initial="init"
-        # )
         self.winning_seat_i = None
 
         # TODO: Handle not having enough players to start a hand
@@ -122,12 +75,10 @@ class Hand:
             await self.prompt_current_player(options=self.round.actions_allowed)
             action_event = await self._get_action_from_current_player()
             action_event = self._handle_no_action_received(action_event)
-            await self._broadcast_action(
-                action_event
-            )  # TODO: THIS IS NOT BROADCASTING TO EVERYONE
+            await self._broadcast_action(action_event)
         print("COLLECTING CHIPS")
         self._collect_chips()
-        if self.everyone_has_folded:
+        if self.round.everyone_has_folded:
             return self.finish_hand()
         return await self.begin_flop()
 
@@ -142,11 +93,13 @@ class Hand:
         self.round = Round(seats=self.seats, first_to_act_i=self.bb_i, bb=self.bb)
 
         while not self.round.is_done:
-            # TODO: This is spazzing I think
             await self.prompt_current_player(options=self.round.actions_allowed)
+            action_event = await self._get_action_from_current_player()
+            action_event = self._handle_no_action_received(action_event)
+            await self._broadcast_action(action_event)
 
         self._collect_chips()
-        if self.everyone_has_folded:
+        if self.round.everyone_has_folded:
             return self.finish_hand()
         return await self.begin_turn()
 
@@ -161,15 +114,18 @@ class Hand:
 
         while not self.round.is_done:
             await self.prompt_current_player(options=self.round.actions_allowed)
+            action_event = await self._get_action_from_current_player()
+            action_event = self._handle_no_action_received(action_event)
+            await self._broadcast_action(action_event)
 
         self._collect_chips()
-        if self.everyone_has_folded:
+        if self.round.everyone_has_folded:
             return self.finish_hand()
         return await self.begin_river()
 
     async def begin_river(self):
         print(f"RIVER STARTED !!!!!!!!!!!!")
-        self._deal_river_card()
+        await self._deal_river_card()
 
         if self.round.players_are_all_in:
             return self.showdown()
@@ -178,9 +134,12 @@ class Hand:
 
         while not self.round.is_done:
             await self.prompt_current_player(options=self.round.actions_allowed)
+            action_event = await self._get_action_from_current_player()
+            action_event = self._handle_no_action_received(action_event)
+            await self._broadcast_action(action_event)
 
         self._collect_chips()
-        if self.everyone_has_folded:
+        if self.round.everyone_has_folded:
             return self.finish_hand()
         return await self.showdown()
 
@@ -193,17 +152,13 @@ class Hand:
         self.event_manager.broadcast_to_table(
             DeclareWinnerEvent(winning_seat_i=self.winning_seat_i).json()
         )
-        return await self.finish_hand()
+        return self.finish_hand()
 
     def finish_hand(self):
         print(f"FINISH HAND STARTED !!!!!!!!!!!!")
-        if self.winning_seat_i is None and self.everyone_has_folded():
+        if self.winning_seat_i is None and self.round.everyone_has_folded:
             self.winning_seat_i = self.round.last_man_standing_i
         self._push_winnings()
-
-    @property
-    def everyone_has_folded(self):
-        return self.round.everyone_has_folded
 
     async def prompt_current_player(self, options):
         await self.event_manager.push_to_player(
@@ -279,7 +234,11 @@ class Hand:
 
     def _determine_winner(self, hole_cards):
         hand_scores = {}
+        # TODO: for i in range(len(hole_cards["cards"])):
+        #             ~~~~~~~~~~^^^^^^^^^
+        # TypeError: string indices must be integers, not 'str'
         for i in range(len(hole_cards["cards"])):
+
             hand_scores[hole_cards["seats_i"][i]] = self.evaluator(
                 hole_cards["cards"][i]
             )
