@@ -167,6 +167,7 @@ class Round:
         self.current_seat_i = (self.current_seat_i + 1) % len(self.seats)
         while not self.everyone_has_folded and self.current_player.has_folded:
             self.current_seat_i = (self.current_seat_i + 1) % len(self.seats)
+            print(f"CURRENT SEAT ID: {self.current_seat_i}")
 
     @property
     def _amount_to_call(self):

@@ -10,7 +10,7 @@ from models.seat import Seat
 
 class HoleCards(BaseModel):
     name: str = "holeCards"
-    cards: list[int]
+    cards: list[str]
 
 
 class DealFaceDownHoleCards(BaseModel):
@@ -47,22 +47,22 @@ class InvalidActionSubmittedEvent(BaseModel):
 class FlipHoleCardsEvent(BaseModel):
     name: str = "flipHoleCardsEvent"
     seats_i: list[int] = []
-    cards: list[list[int]] = []
+    cards: list[list[str]] = []
 
 
 class DealFlopEvent(BaseModel):
     name: str = "dealFlopEvent"
-    cards: list[int]
+    cards: list[str]
 
 
 class DealTurnEvent(BaseModel):
     name: str = "dealTurnEvent"
-    cards: list[int]
+    cards: list[str]
 
 
 class DealRiverEvent(BaseModel):
     name: str = "dealRiverEvent"
-    cards: list[int]
+    cards: list[str]
 
 
 class CheckEvent(BaseModel):

@@ -11,7 +11,7 @@ RANK_MAP = {
     5: "7",
     6: "8",
     7: "9",
-    8: "10",
+    8: "T",
     9: "J",
     10: "Q",
     11: "K",
@@ -33,7 +33,7 @@ class Deck:
         drawn_cards = []
         for _ in range(count):
             drawn_cards.append(self._cards.pop())
-        return drawn_cards
+        return self.convert_cards_to_str(drawn_cards)
 
     def convert_card_to_str(self, card_int: int) -> str:
         if not -1 < card_int < 52:

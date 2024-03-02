@@ -68,5 +68,6 @@ class TableEventManager:
                 return action_event
             else:
                 await self.push_to_player(
-                    seat_i=round.current_seat_i, event=InvalidActionSubmittedEvent()
+                    seat_i=round.current_seat_i,
+                    event=InvalidActionSubmittedEvent().model_dump_json(),
                 )

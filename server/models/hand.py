@@ -146,11 +146,11 @@ class Hand:
     async def showdown(self):
         print(f"SHOWDOWN STARTED !!!!!!!!!!!!")
         # TODO: Give option to not flip cards and flip hole cards in order
-        flipped_cards = self._flip_cards_over()
+        flipped_cards = await self._flip_cards_over()
 
         self.winning_seat_i = self._determine_winner(flipped_cards)
-        self.event_manager.broadcast_to_table(
-            DeclareWinnerEvent(winning_seat_i=self.winning_seat_i).json()
+        await self.event_manager.broadcast_to_table(
+            DeclareWinnerEvent(winning_seat_i=self.winning_seat_i).model_dump_json()
         )
         return self.finish_hand()
 
@@ -197,6 +197,7 @@ class Hand:
         for seat_i, seat in enumerate(self.seats):
             if seat and seat.is_sitting_in:
                 cards = self.deck.draw_cards(2)
+                print(f"Seat {seat_i} Hole Cards: {cards}")
                 seat.set_hole_cards(cards)
                 await self.event_manager.push_to_player(
                     seat_i=seat_i,
@@ -206,42 +207,52 @@ class Hand:
 
     async def _deal_flop_cards(self):
         cards = self.deck.draw_cards(3)
+        print(f"Flop: {cards}")
         self.board.extend(cards)
-        await self.event_manager.broadcast_to_table(DealFlopEvent(cards=cards).json())
+        await self.event_manager.broadcast_to_table(
+            DealFlopEvent(cards=cards).model_dump_json()
+        )
 
     async def _deal_turn_card(self):
         cards = self.deck.draw_cards(1)
+        print(f"Turn: {cards}")
         self.board.extend(cards)
-        await self.event_manager.broadcast_to_table(DealTurnEvent(cards=cards).json())
+        await self.event_manager.broadcast_to_table(
+            DealTurnEvent(cards=cards).model_dump_json()
+        )
 
     async def _deal_river_card(self):
         cards = self.deck.draw_cards(1)
         self.board.extend(cards)
-        await self.event_manager.broadcast_to_table(DealRiverEvent(cards=cards).json())
+        print(f"River: {cards}")
+        await self.event_manager.broadcast_to_table(
+            DealRiverEvent(cards=cards).model_dump_json()
+        )
 
-    def _flip_cards_over(self) -> dict:
+    async def _flip_cards_over(self) -> dict:
         hole_cards_event = FlipHoleCardsEvent()
-
+        print(f"Board: {self.board}")
         for i in range(len(self.seats)):
             seat_i = (self.round.last_bettor_i + i) % len(self.seats)
-            if self.seats[seat_i].is_sitting_in and not self.seats[seat_i].has_folded:
+            if (
+                self.seats[seat_i]
+                and self.seats[seat_i].is_sitting_in
+                and not self.seats[seat_i].has_folded
+            ):
                 hole_cards_event.seats_i.append(seat_i)
                 hole_cards_event.cards.append(self.seats[seat_i].cards)
 
-        self.event_manager.broadcast_to_table(hole_cards_event.json())
-
-        return hole_cards_event.model_dump_json()
+        await self.event_manager.broadcast_to_table(hole_cards_event.model_dump_json())
+        return hole_cards_event.model_dump()
 
     def _determine_winner(self, hole_cards):
         hand_scores = {}
-        # TODO: for i in range(len(hole_cards["cards"])):
-        #             ~~~~~~~~~~^^^^^^^^^
-        # TypeError: string indices must be integers, not 'str'
-        for i in range(len(hole_cards["cards"])):
 
-            hand_scores[hole_cards["seats_i"][i]] = self.evaluator(
-                hole_cards["cards"][i]
-            )
+        for i in range(len(hole_cards["cards"])):
+            seven_cards = hole_cards["cards"][i]
+            seven_cards.extend(self.board)
+            # seven_cards_readable = self.deck.convert_cards_to_str(seven_cards)
+            hand_scores[hole_cards["seats_i"][i]] = self.evaluator(*seven_cards)
         return min(hand_scores, key=hand_scores.get)
 
     def _push_winnings(self):
