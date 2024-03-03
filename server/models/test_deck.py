@@ -22,7 +22,7 @@ def test_convert_card_to_str():
             "7c",
             "8c",
             "9c",
-            "10c",
+            "Tc",
             "Jc",
             "Qc",
             "Kc",
@@ -35,7 +35,7 @@ def test_convert_card_to_str():
             "7d",
             "8d",
             "9d",
-            "10d",
+            "Td",
             "Jd",
             "Qd",
             "Kd",
@@ -48,7 +48,7 @@ def test_convert_card_to_str():
             "7h",
             "8h",
             "9h",
-            "10h",
+            "Th",
             "Jh",
             "Qh",
             "Kh",
@@ -61,7 +61,7 @@ def test_convert_card_to_str():
             "7s",
             "8s",
             "9s",
-            "10s",
+            "Ts",
             "Js",
             "Qs",
             "Ks",
@@ -77,11 +77,11 @@ def test_convert_cards_to_str():
         ([0, 13, 26, 39, 4, 17, 30], ["2c", "2d", "2h", "2s", "6c", "6d", "6h"]),
         ([2, 15, 28, 41, 6, 19, 50], ["4c", "4d", "4h", "4s", "8c", "8d", "Ks"]),
         # Case 3: Random mix of cards
-        ([8, 22, 36, 50, 11, 25, 38], ["10c", "Jd", "Qh", "Ks", "Kc", "Ad", "Ah"]),
+        ([8, 22, 36, 50, 11, 25, 38], ["Tc", "Jd", "Qh", "Ks", "Kc", "Ad", "Ah"]),
         # Case 4: All Aces
         ([12, 25, 38, 51, 0, 13, 26], ["Ac", "Ad", "Ah", "As", "2c", "2d", "2h"]),
-        # Case 5: All 10s with different suits
-        ([8, 21, 34, 47, 10, 23, 36], ["10c", "10d", "10h", "10s", "Qc", "Qd", "Qh"]),
+        # Case 5: All Ts with different suits
+        ([8, 21, 34, 47, 10, 23, 36], ["Tc", "Td", "Th", "Ts", "Qc", "Qd", "Qh"]),
         # Case 6: All face cards with different suits
         ([9, 22, 35, 48, 11, 24, 37], ["Jc", "Jd", "Jh", "Js", "Kc", "Kd", "Kh"]),
         # Case 7: All 2s with different suits

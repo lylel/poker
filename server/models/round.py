@@ -119,11 +119,22 @@ class Round:
         return False
 
     def call(self, **kwargs):
-        if self._amount_to_call < self.current_player.chips:
-            self.current_player.chips -= self._amount_to_call
-            self.current_player.chips_put_in = self.current_bet
+        if not self.current_bet:
+            return False
+        # TODO: Handle calling when not enough chips
+        if self._amount_to_call > self.current_player.chips:
+            self.current_player.chips_put_in += self.current_player.chips
+            self.current_player.chips = 0
+            # TODO: Handle more logic for > 2 players
+            self.seats[self.last_bettor_i].chips += (
+                self.current_bet - self.current_player.chips_put_in
+            )
+            self.current_bet = self.current_player.chips_put_in
             return True
-        return False
+        else:
+            self.current_player.chips -= self._amount_to_call
+            self.current_player.chips_put_in += self._amount_to_call
+            return True
 
     def raise_(self, **kwargs):
         if not (total_put_in := kwargs.get("amount")):
@@ -180,3 +191,10 @@ class Round:
     @property
     def _player_has_not_called(self):
         return self.current_player.chips_put_in < self.current_bet
+
+    def __str__(self):
+        repr = f"Pot: {self.pot}\n"
+        for seat in self.seats:
+            if seat:
+                repr += f"Player ID: {seat.player_id} Chips: {seat.chips} Sitting In: {seat.is_sitting_in} Folded: {seat.has_folded} Put in: {seat.chips_put_in} \n"
+        return repr

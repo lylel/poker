@@ -41,7 +41,6 @@ async def get():
         table_id="abc", seats=seats, table_connection_manager=table_connection_manager
     )
 
-    await event_manager.broadcast_to_table({"hi": "bye"})
     hand = Hand(
         seats=[seat_1, seat_2],
         sb=5,

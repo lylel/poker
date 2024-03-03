@@ -89,12 +89,12 @@ class CallEvent(BaseModel):
 class RaiseEvent(BaseModel):
     name: str = "raiseEvent"
     seat_i: int
-    amount_i: int
+    amount: int
 
 
-class DeclareWinnerEvent(BaseModel):
-    name: str = "declareWinnerEvent"
-    winning_seat_i: int
+class DeclareWinnersEvent(BaseModel):
+    name: str = "declareWinnersEvent"
+    winning_seats_i: list[int]
 
 
 # TODO: AllInEvent

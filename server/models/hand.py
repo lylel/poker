@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from phevaluator import evaluate_cards
 
 from models.round import Round
@@ -9,13 +11,11 @@ from client_events.events import (
     UpdatePot,
     PromptAction,
     ACTION_EVENT_MAP,
-    CheckEvent,
-    FoldEvent,
     DealFlopEvent,
     DealTurnEvent,
     DealRiverEvent,
     FlipHoleCardsEvent,
-    DeclareWinnerEvent,
+    DeclareWinnersEvent,
 )
 from models.enums import Action
 from models.seat import Seat
@@ -50,14 +50,14 @@ class Hand:
             bb=self.bb,
         )
         self.evaluator = evaluator
-        self.winning_seat_i = None
+        self.winners_i = None
 
         # TODO: Handle not having enough players to start a hand
         # self.proceed()
 
     async def begin_preflop(self):
-        print(f"PREFLOP STARTED !!!!!!!!!!!!")
-
+        print(f"Board {self.board} Pot {self.pot}")
+        print(f"{self.round}")
         self.round.get_small_blind(self.sb_i, self.sb)
         self.round.get_big_blind(self.bb_i, self.bb)
         await self.event_manager.broadcast_to_table(
@@ -76,19 +76,20 @@ class Hand:
             action_event = await self._get_action_from_current_player()
             action_event = self._handle_no_action_received(action_event)
             await self._broadcast_action(action_event)
-        print("COLLECTING CHIPS")
         self._collect_chips()
         if self.round.everyone_has_folded:
             return self.finish_hand()
         return await self.begin_flop()
 
     async def begin_flop(self):
-        print(f"FLOP STARTED !!!!!!!!!!!!")
+        print(f"Board {self.board} Pot {self.pot}")
+        print(f"{self.round}")
+
         # TODO: don't allow players to sit in in the middle of a hand
         await self._deal_flop_cards()
 
         if self.round.players_are_all_in:
-            return self.begin_turn()
+            return await self.begin_turn()
 
         self.round = Round(seats=self.seats, first_to_act_i=self.bb_i, bb=self.bb)
 
@@ -104,11 +105,12 @@ class Hand:
         return await self.begin_turn()
 
     async def begin_turn(self):
-        print(f"TURN STARTED !!!!!!!!!!!!")
+        print(f"Board {self.board} Pot {self.pot}")
+        print(f"{self.round}")
         await self._deal_turn_card()
 
         if self.round.players_are_all_in:
-            return self.begin_river()
+            return await self.begin_river()
 
         self.round = Round(seats=self.seats, first_to_act_i=self.bb_i, bb=self.bb)
 
@@ -124,11 +126,12 @@ class Hand:
         return await self.begin_river()
 
     async def begin_river(self):
-        print(f"RIVER STARTED !!!!!!!!!!!!")
+        print(f"Board {self.board} Pot {self.pot}")
+        print(f"{self.round}")
         await self._deal_river_card()
 
         if self.round.players_are_all_in:
-            return self.showdown()
+            return await self.showdown()
 
         self.round = Round(seats=self.seats, first_to_act_i=self.bb_i, bb=self.bb)
 
@@ -144,21 +147,23 @@ class Hand:
         return await self.showdown()
 
     async def showdown(self):
-        print(f"SHOWDOWN STARTED !!!!!!!!!!!!")
+        print(f"{self.round}")
         # TODO: Give option to not flip cards and flip hole cards in order
         flipped_cards = await self._flip_cards_over()
 
-        self.winning_seat_i = self._determine_winner(flipped_cards)
+        self.winners_i = self._determine_winners(flipped_cards)
         await self.event_manager.broadcast_to_table(
-            DeclareWinnerEvent(winning_seat_i=self.winning_seat_i).model_dump_json()
+            DeclareWinnersEvent(winning_seats_i=self.winners_i).model_dump_json()
         )
         return self.finish_hand()
 
     def finish_hand(self):
         print(f"FINISH HAND STARTED !!!!!!!!!!!!")
-        if self.winning_seat_i is None and self.round.everyone_has_folded:
-            self.winning_seat_i = self.round.last_man_standing_i
+        if not self.winners_i and self.round.everyone_has_folded:
+            self.winners_i = [self.round.last_man_standing_i]
         self._push_winnings()
+        print(f"{self.round}")
+        print(f"{self.pot}")
 
     async def prompt_current_player(self, options):
         await self.event_manager.push_to_player(
@@ -168,30 +173,27 @@ class Hand:
     async def _get_action_from_current_player(self):
         return await self.event_manager.get_action_from_player(self.round)
 
-    def _handle_no_action_received(self, action_event):
-        if not action_event:
+    def _handle_no_action_received(self, action):
+        if not action:
             if self.round.no_action_required:
-                self.round.act({"type": Action.CHECK.value})
-                return CheckEvent(seat_id=self.round.current_seat_i)
-            self.round.act({"type": Action.FOLD.value})
-            return FoldEvent(seat_id=self.round.current_seat_i)
-        return action_event
+                action = {"type": Action.CHECK.value}
+            else:
+                action = {"type": Action.FOLD.value}
+            self.round.act(action)
+        return action
 
-    async def _broadcast_action(self, action_event):
-        amount = action_event.get("amount")
-        action_event = ACTION_EVENT_MAP[action_event["type"]](
-            seat_i=self.round.current_seat_i
+    async def _broadcast_action(self, action):
+        action_event = ACTION_EVENT_MAP[action["type"]](
+            seat_i=self.round.current_seat_i, amount=action.get("amount")
         )
-        if amount:
-            action_event.amount = amount
         await self.event_manager.broadcast_to_table(
             event=action_event.model_dump_json()
         )
 
     def _collect_chips(self):
+        self.pot += self.round.pot
         for seat in self.seats:
             seat.chips_put_in = 0
-        self.pot += self.round.pot
 
     async def _deal_hole_cards(self):
         for seat_i, seat in enumerate(self.seats):
@@ -245,16 +247,19 @@ class Hand:
         await self.event_manager.broadcast_to_table(hole_cards_event.model_dump_json())
         return hole_cards_event.model_dump()
 
-    def _determine_winner(self, hole_cards):
-        hand_scores = {}
+    def _determine_winners(self, hole_cards) -> list[int]:
+        scores_seat_map = defaultdict(list)
 
         for i in range(len(hole_cards["cards"])):
             seven_cards = hole_cards["cards"][i]
             seven_cards.extend(self.board)
-            # seven_cards_readable = self.deck.convert_cards_to_str(seven_cards)
-            hand_scores[hole_cards["seats_i"][i]] = self.evaluator(*seven_cards)
-        return min(hand_scores, key=hand_scores.get)
+            score = self.evaluator(*seven_cards)
+            scores_seat_map[score].append(hole_cards["seats_i"][i])
+
+        min_score = min(scores_seat_map.keys())
+        return scores_seat_map[min_score]
 
     def _push_winnings(self):
-        print(f"winning_seat_i: {self.winning_seat_i}")
-        self.seats[self.winning_seat_i].chips += self.pot
+        for seat_i in range(len(self.winners_i)):
+            self.seats[self.winners_i[seat_i]].chips += self.pot // len(self.winners_i)
+        print(f"Winners: {self.winners_i}")
